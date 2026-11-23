@@ -1,0 +1,64 @@
+# ============================================
+# .gitignore: يمنع رفع الأسرار والملفات المؤقتة
+# القاعدة: أي مفتاح أو كلمة سر أو توكن عمره ما يتحط في Git.
+# ============================================
+
+# --- الأسرار ومتغيرات البيئة ---
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.secret
+*.secrets
+secrets.*
+secret.*
+credentials.*
+*credentials*.json
+service-account*.json
+*.token
+
+# --- مفاتيح وشهادات ---
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.ppk
+*.gpg
+*.kdbx
+
+# --- ملفات Cloudflare المحلية ---
+.wrangler/
+.mf/
+
+# --- بيانات حقيقية (مكانها قاعدة البيانات مش Git) ---
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.bak
+backups/
+
+# --- ملفات المكتبات والبناء ---
+node_modules/
+dist/
+.astro/
+.cache/
+coverage/
+
+# --- ملفات النظام والمحررات ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+npm-debug.log*
+*.swp
+*~
