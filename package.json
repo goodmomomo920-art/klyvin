@@ -8,7 +8,7 @@
     "build": "astro build",
     "preview": "astro preview --host 127.0.0.1",
     "check": "astro check",
-    "test": "node --experimental-strip-types --test src/lib/db/store-scope.test.ts",
+    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "secrets": "secretlint --secretlintignore .secretlintignore \"**/*\"",
