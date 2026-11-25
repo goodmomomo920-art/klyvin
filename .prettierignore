@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.astro/
+.preview/
+.wrangler/
+public/
+migrations/
+package-lock.json
+*.log

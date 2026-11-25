@@ -1,0 +1,10 @@
+{
+  "*.{astro,ts,tsx,js,jsx,mjs,cjs,css,json,md,yml,yaml,toml}!(*package-lock.json)": [
+    "prettier --write"
+  ],
+  "*.{astro,ts,tsx,js,jsx,mjs,cjs,css,json,md,yml,yaml,toml,sql}": [
+    "secretlint --secretlintignore .secretlintignore"
+  ],
+  ".env*": ["secretlint --secretlintignore .secretlintignore"],
+  "*.{pem,key,p12,pfx,crt,cer,ppk}": ["secretlint --secretlintignore .secretlintignore"]
+}

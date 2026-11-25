@@ -6,9 +6,35 @@
   "scripts": {
     "dev": "astro dev --host 127.0.0.1",
     "build": "astro build",
-    "preview": "astro preview --host 127.0.0.1"
+    "preview": "astro preview --host 127.0.0.1",
+    "check": "astro check",
+    "test": "node --experimental-strip-types --test src/lib/db/store-scope.test.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "secrets": "secretlint --secretlintignore .secretlintignore \"**/*\"",
+    "size": "node scripts/check-file-size.mjs",
+    "verify": "npm run secrets && npm run size && npm run check && npm test",
+    "prepare": "husky"
   },
   "dependencies": {
-    "astro": "^5.14.1"
+    "@astrojs/cloudflare": "^12.6.10",
+    "@astrojs/react": "^7.1.9",
+    "astro": "^5.14.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@cloudflare/workers-types": "^5.20261125.1",
+    "@secretlint/secretlint-rule-preset-recommend": "^13.1.0",
+    "@types/react": "^19.3.3",
+    "@types/react-dom": "^19.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.2",
+    "prettier": "^3.10.1",
+    "prettier-plugin-astro": "^1.1.2",
+    "secretlint": "^14.1.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.168.0"
   }
 }

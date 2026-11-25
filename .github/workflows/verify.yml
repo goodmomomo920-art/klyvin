@@ -1,0 +1,22 @@
+name: verify
+
+# شبكة أمان تانية: نفس الفحوصات بتشتغل على GitHub،
+# حتى لو حد رفع من المتصفح أو من جهاز مفيهوش الـ hooks.
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run secrets
+      - run: npm run size
+      - run: npm run check
+      - run: npm test
