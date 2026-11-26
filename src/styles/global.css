@@ -310,10 +310,10 @@ section[id] {
 
 .heart {
   position: absolute;
-  left: -7%;
-  bottom: 88px;
-  width: min(340px, 54%);
-  transform: rotate(-6deg);
+  left: -13%;
+  bottom: 58px;
+  width: min(250px, 40%);
+  transform: rotate(-8deg);
 }
 
 .mascot {
@@ -448,8 +448,9 @@ section[id] {
 }
 
 .s-banner img {
-  width: 74px;
+  width: 76px;
   height: auto;
+  border-radius: 9px;
 }
 
 .s-grid {
@@ -659,7 +660,7 @@ section[id] {
   box-shadow: 0 14px 22px -16px rgba(255, 122, 40, 1);
 }
 
-.dash {
+.mock-dash {
   padding: 10px;
   background: #0f0f12;
   border-radius: 18px;
@@ -667,26 +668,26 @@ section[id] {
   transform: rotate(-1.2deg);
 }
 
-.dash-bar {
+.mock-dash-bar {
   display: flex;
   gap: 5px;
   padding: 3px 6px 10px;
 }
 
-.dash-bar i {
+.mock-dash-bar i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: #3f3f46;
 }
 
-.dash-body {
+.mock-dash-body {
   display: grid;
   grid-template-columns: 46px 1fr;
   gap: 9px;
 }
 
-.dash-side {
+.mock-dash-side {
   display: grid;
   justify-items: center;
   align-content: start;
@@ -696,7 +697,7 @@ section[id] {
   background: #17171b;
 }
 
-.dash-logo {
+.mock-dash-logo {
   display: grid;
   place-items: center;
   width: 26px;
@@ -709,25 +710,25 @@ section[id] {
   font-weight: 800;
 }
 
-.di {
+.mock-di {
   width: 16px;
   height: 16px;
   border-radius: 5px;
   background: #26262c;
 }
 
-.dash-main {
+.mock-dash-main {
   display: grid;
   gap: 9px;
 }
 
-.dash-cards {
+.mock-dash-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 9px;
 }
 
-.dcard {
+.mock-dcard {
   display: grid;
   gap: 1px;
   padding: 10px;
@@ -735,12 +736,12 @@ section[id] {
   background: #17171b;
 }
 
-.dcard .dl {
+.mock-dcard .dl {
   color: #9ca3af;
   font-size: 0.55rem;
 }
 
-.dcard strong {
+.mock-dcard strong {
   color: #fff;
   font-family: var(--font-latin);
   font-size: 1.05rem;
@@ -748,13 +749,13 @@ section[id] {
   line-height: 1.3;
 }
 
-.dcard .up {
+.mock-dcard .up {
   color: #4ade80;
   font-size: 0.55rem;
   font-weight: 800;
 }
 
-.chart {
+.mock-chart {
   width: 100%;
   height: 104px;
   padding: 8px;
@@ -762,7 +763,7 @@ section[id] {
   background: #17171b;
 }
 
-.dash-arrow {
+.mock-dash-arrow {
   position: absolute;
   inset-block-start: -30px;
   inset-inline-start: -6px;
@@ -945,7 +946,8 @@ section[id] {
   display: flex;
   align-items: center;
   gap: 1.4rem;
-  padding: clamp(1.7rem, 3.4vw, 2.6rem) clamp(1.5rem, 4vw, 3rem);
+  padding-block: clamp(1.7rem, 3.4vw, 2.6rem);
+  padding-inline: clamp(150px, 16vw, 210px) clamp(1.5rem, 4vw, 3rem);
   border-radius: 30px;
   background: var(--ink);
   color: #fff;
@@ -954,8 +956,7 @@ section[id] {
 .cta-copy {
   position: relative;
   z-index: 2;
-  max-width: 48ch;
-  margin-inline-start: clamp(0px, 6vw, 105px);
+  max-width: 46ch;
 }
 
 .cta-copy h2 {
@@ -980,17 +981,17 @@ section[id] {
 
 .plane {
   position: absolute;
-  inset-inline-start: 1.5rem;
-  inset-block-end: 1rem;
-  width: 100px;
-  opacity: 0.85;
+  left: 1.2rem;
+  bottom: 0.9rem;
+  width: 96px;
+  opacity: 0.8;
 }
 
 .cta-mascot {
   position: absolute;
-  right: -10px;
-  bottom: -34px;
-  width: 168px;
+  right: -6px;
+  bottom: -36px;
+  width: 182px;
   z-index: 1;
 }
 
@@ -1113,11 +1114,11 @@ section[id] {
     flex-direction: column;
     align-items: flex-start;
     gap: 1.1rem;
+    padding-inline: clamp(1.5rem, 4vw, 3rem);
   }
 
   .cta-copy {
-    margin-inline-start: 0;
-    padding-inline-end: 96px;
+    padding-inline-start: 96px;
   }
 
   .cta-panel .btn {
@@ -1154,7 +1155,7 @@ section[id] {
     width: 38%;
   }
 
-  .dash-arrow {
+  .mock-dash-arrow {
     display: none;
   }
 }

@@ -52,7 +52,9 @@
   font-weight: 700;
 }
 
-.field input,
+/* Radios/checkboxes are visually hidden variants (see .variant-row), so they
+   must not inherit the full-width text-input styling or they widen the page. */
+.field input:not([type="radio"]):not([type="checkbox"]),
 .field select,
 .field textarea {
   width: 100%;
@@ -93,7 +95,7 @@
 
 .dash {
   display: grid;
-  grid-template-columns: 232px 1fr;
+  grid-template-columns: 232px minmax(0, 1fr);
   min-height: 100vh;
   background: var(--paper);
 }
@@ -432,6 +434,9 @@ table.data td a {
 
 .pcard {
   display: grid;
+  /* minmax(0,1fr) stops the card's own column from being widened by the
+     intrinsic width of the product image (which is 100% of that column). */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.5rem;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -448,13 +453,16 @@ table.data td a {
 .pcard-media {
   display: grid;
   place-items: center;
+  min-width: 0;
   aspect-ratio: 1;
+  overflow: hidden;
   background: linear-gradient(135deg, #f7f7f9, #ececf1);
   color: #c4c4cc;
   font-size: 0.78rem;
 }
 
 .pcard-media img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -463,6 +471,7 @@ table.data td a {
 .pcard-body {
   display: grid;
   gap: 0.2rem;
+  min-width: 0;
   padding: 0 0.85rem 0.9rem;
 }
 
@@ -706,12 +715,15 @@ table.data td a {
 
 @media (max-width: 860px) {
   .dash {
-    grid-template-columns: 1fr;
+    /* minmax(0,1fr) lets the single column shrink below the intrinsic width
+       of wide children (tables), which otherwise push the page sideways. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .dash-side {
     position: static;
     height: auto;
+    min-width: 0;
     border-inline-end: 0;
     border-block-end: 1px solid var(--line);
   }
