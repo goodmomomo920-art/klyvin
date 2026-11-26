@@ -1,0 +1,32 @@
+# Cloudflare configuration for local development and deployment.
+# Secrets never live here: use `wrangler secret put` for production.
+
+name = "klyvin"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets produced by `astro build`.
+assets = { directory = "./dist", binding = "ASSETS" }
+
+# D1 — the platform database (stores, products, orders, customers).
+# `database_id` stays empty for local dev; fill it after `wrangler d1 create`.
+[[d1_databases]]
+binding = "DB"
+database_name = "klyvin-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# R2 — product images and digital files.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "klyvin-media"
+
+# KV — Astro sessions (we use our own D1 sessions for auth; KV backs the
+# framework's session store so it does not warn at build time).
+[[kv_namespaces]]
+binding = "SESSION"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
+
+[observability]
+enabled = true
