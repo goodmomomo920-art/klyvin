@@ -1,0 +1,40 @@
+---
+/** Base HTML shell: RTL Arabic, brand fonts, no-JS-first. */
+import '../styles/global.css';
+import '../styles/app.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Applies the storefront theme colour when rendering a tenant store. */
+  themeColor?: string | null;
+}
+
+const {
+  title,
+  description = 'Klyvin — منصة تفتح بيها متجرك الإلكتروني في دقائق، من غير برمجة.',
+  themeColor,
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/png" href="/brand/icon.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Alexandria:wght@600;700;800&display=swap"
+    />
+
+  </head>
+  <body style={themeColor ? `--accent: ${themeColor}` : undefined}>
+    <slot />
+  </body>
+</html>

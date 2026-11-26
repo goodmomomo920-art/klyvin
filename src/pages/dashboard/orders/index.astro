@@ -1,0 +1,119 @@
+---
+/** Orders list with status filter. */
+import Dashboard from '../../../layouts/Dashboard.astro';
+import { dashboardContext } from '../../../lib/dashboard';
+import { money } from '../../../lib/format';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect('/login');
+
+const { db, currency } = ctx;
+
+const statuses = await db.all<{ id: string; name_ar: string; kind: string }>(
+  'SELECT id, name_ar, kind FROM order_statuses WHERE store_id = ?1 ORDER BY sort_order',
+);
+
+const filter = Astro.url.searchParams.get('status');
+
+const orders = filter
+  ? await db.all<{
+      id: string;
+      reference: string;
+      total_cents: number;
+      created_at: string;
+      status: string;
+      customer_name: string | null;
+      item_count: number;
+    }>(
+      `SELECT o.id, o.reference, o.total_cents, o.created_at,
+              s.name_ar AS status, o.shipping_name AS customer_name,
+              (SELECT COUNT(*) FROM order_items i
+                WHERE i.store_id = o.store_id AND i.order_id = o.id) AS item_count
+         FROM orders o
+         JOIN order_statuses s ON s.id = o.status_id AND s.store_id = o.store_id
+        WHERE o.store_id = ?1 AND o.status_id = ?2
+        ORDER BY o.created_at DESC`,
+      [filter],
+    )
+  : await db.all<{
+      id: string;
+      reference: string;
+      total_cents: number;
+      created_at: string;
+      status: string;
+      customer_name: string | null;
+      item_count: number;
+    }>(
+      `SELECT o.id, o.reference, o.total_cents, o.created_at,
+              s.name_ar AS status, o.shipping_name AS customer_name,
+              (SELECT COUNT(*) FROM order_items i
+                WHERE i.store_id = o.store_id AND i.order_id = o.id) AS item_count
+         FROM orders o
+         JOIN order_statuses s ON s.id = o.status_id AND s.store_id = o.store_id
+        WHERE o.store_id = ?1
+        ORDER BY o.created_at DESC`,
+    );
+---
+
+<Dashboard title="الطلبات">
+  <header class="dash-head">
+    <div>
+      <h1>الطلبات</h1>
+      <p>{orders.length} طلب.</p>
+    </div>
+  </header>
+
+  <div class="cat-row" style="padding-block:0 1rem">
+    <a href="/dashboard/orders" class="cat-chip" aria-current={!filter ? 'page' : undefined}>الكل</a>
+    {
+      statuses.map((status) => (
+        <a
+          href={`/dashboard/orders?status=${status.id}`}
+          class="cat-chip"
+          aria-current={filter === status.id ? 'page' : undefined}
+        >
+          {status.name_ar}
+        </a>
+      ))
+    }
+  </div>
+
+  <div class="panel">
+    {
+      orders.length === 0 ? (
+        <p class="empty">مفيش طلبات في الفلتر ده.</p>
+      ) : (
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>الطلب</th>
+                <th>العميل</th>
+                <th>المنتجات</th>
+                <th>الإجمالي</th>
+                <th>الحالة</th>
+                <th>التاريخ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => (
+                <tr>
+                  <td>
+                    <a href={`/dashboard/orders/${order.id}`}>{order.reference}</a>
+                  </td>
+                  <td>{order.customer_name ?? '—'}</td>
+                  <td>{order.item_count}</td>
+                  <td>{money(order.total_cents, currency)}</td>
+                  <td>
+                    <span class="tag">{order.status}</span>
+                  </td>
+                  <td>{order.created_at.slice(0, 10)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </div>
+</Dashboard>

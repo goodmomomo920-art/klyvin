@@ -1,0 +1,64 @@
+---
+/**
+ * Storefront shell. Every tenant page renders inside this.
+ *
+ * The theme colour comes from the store's own settings, and prices are hidden
+ * here at the layout level so no child page can leak them when the merchant
+ * turned `show_prices` off.
+ */
+import Layout from './Layout.astro';
+import type { StoreContext } from '../lib/store';
+import { CART_COOKIE, parseCart } from '../lib/cart';
+
+interface Props {
+  store: StoreContext;
+  title?: string;
+  /** Pass the resolved item count to avoid re-parsing in the header. */
+  cartCount?: number;
+}
+
+const { store, title, cartCount } = Astro.props;
+
+const heading = title ? `${title} — ${store.name}` : store.name;
+
+let count = cartCount;
+if (count === undefined) {
+  const cart = parseCart(Astro.cookies.get(CART_COOKIE)?.value, store.slug);
+  count = cart.items.reduce((sum, item) => sum + item.q, 0);
+}
+
+const base = `/s/${store.slug}`;
+const path = Astro.url.pathname;
+---
+
+<Layout title={heading} description={store.tagline ?? undefined} themeColor={store.themeColor}>
+  <div class="store-bar" style={`--accent: ${store.themeColor}`}>
+    <div class="shell store-bar-in">
+      <a href={base} class="store-logo">
+        {store.logoUrl && <img src={store.logoUrl} alt="" width="34" height="34" />}
+        <span>{store.name}</span>
+      </a>
+
+      <nav class="store-links">
+        <a href={base} aria-current={path === base ? 'page' : undefined}>الرئيسية</a>
+        <a href={`${base}/products`} aria-current={path.startsWith(`${base}/products`) ? 'page' : undefined}>
+          المنتجات
+        </a>
+        <a href={`${base}/cart`} class="cart-pill">
+          السلة{count > 0 && ` (${count})`}
+        </a>
+      </nav>
+    </div>
+  </div>
+
+  <slot />
+
+  <footer class="store-foot">
+    <div class="shell">
+      <p>{store.name}{store.phone && ` — ${store.phone}`}</p>
+      <p style="margin-block-start:.3rem;font-size:.76rem">
+        مدعوم بواسطة <a href="/" style="font-weight:800">Klyvin</a>
+      </p>
+    </div>
+  </footer>
+</Layout>

@@ -1,0 +1,101 @@
+---
+/**
+ * "My store" page: the shareable link, a live preview, and the handful of
+ * switches that change what customers see.
+ */
+import Dashboard from '../../layouts/Dashboard.astro';
+import { dashboardContext } from '../../lib/dashboard';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect('/login');
+
+const { store, db } = ctx;
+
+const counts = await db.first<{ products: number; active: number; orders: number }>(
+  `SELECT
+     (SELECT COUNT(*) FROM products WHERE store_id = ?1)              AS products,
+     (SELECT COUNT(*) FROM products WHERE store_id = ?1 AND is_active = 1) AS active,
+     (SELECT COUNT(*) FROM orders   WHERE store_id = ?1)              AS orders`,
+);
+
+const settings = await db.first<{ show_prices: number; theme_color: string; logo_url: string | null }>(
+  'SELECT show_prices, theme_color, logo_url FROM store_settings WHERE store_id = ?1',
+);
+
+const path = `/s/${store.slug}`;
+const origin = Astro.url.origin;
+const publicUrl = `${origin}${path}`;
+---
+
+<Dashboard title="متجري">
+  <div class="dash-head">
+    <div>
+      <h1>متجري</h1>
+      <p>ده اللينك اللي تبعته لعملائك.</p>
+    </div>
+    <a href={path} target="_blank" rel="noopener" class="btn btn--orange btn--sm">
+      افتح المتجر ↗
+    </a>
+  </div>
+
+  <section class="panel">
+    <h2 style="font-size:.95rem;margin-block-end:.6rem">لينك المتجر</h2>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <code dir="ltr" style="flex:1 1 260px;padding:.55rem .7rem;background:var(--paper);border:1px solid var(--line);border-radius:10px;font-size:.82rem;overflow-wrap:anywhere">
+        {publicUrl}
+      </code>
+      <a href={`https://wa.me/?text=${encodeURIComponent(`اتفضل شوف متجر ${store.name}: ${publicUrl}`)}`}
+         target="_blank" rel="noopener" class="btn btn--ghost btn--sm">
+        شارك على واتساب
+      </a>
+    </div>
+    <p style="margin-block-start:.7rem;font-size:.8rem;color:var(--muted)">
+      قدام هيتحول لدومين خاص بيك زي <code dir="ltr">{store.slug}.klyvin.app</code>. دلوقتي اللينك ده شغال.
+    </p>
+  </section>
+
+  <section class="stats" style="margin-block-start:1rem">
+    <div class="stat">
+      <span>منتجات</span>
+      <strong>{counts?.products ?? 0}</strong>
+    </div>
+    <div class="stat">
+      <span>ظاهرة للعملاء</span>
+      <strong>{counts?.active ?? 0}</strong>
+    </div>
+    <div class="stat">
+      <span>طلبات</span>
+      <strong>{counts?.orders ?? 0}</strong>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-block-start:1rem">
+    <h2 style="font-size:.95rem;margin-block-end:.6rem">معاينة</h2>
+    <iframe
+      src={path}
+      title="معاينة المتجر"
+      style="width:100%;height:520px;border:1px solid var(--line);border-radius:14px;background:#fff"
+      loading="lazy"
+    ></iframe>
+  </section>
+
+  <section class="panel" style="margin-block-start:1rem">
+    <h2 style="font-size:.95rem;margin-block-end:.6rem">إعدادات بتأثر على المتجر</h2>
+    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:.5rem;font-size:.87rem">
+      <li>
+        إظهار الأسعار:
+        <strong>{settings?.show_prices === 1 ? 'ظاهرة' : 'مخفية'}</strong>
+        <a href="/dashboard/settings" class="link-btn" style="margin-inline-start:.4rem">تعديل</a>
+      </li>
+      <li>
+        لون المتجر:
+        <span style={`display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;border:1px solid var(--line);background:${settings?.theme_color ?? '#ff8a3d'}`}></span>
+        <code dir="ltr">{settings?.theme_color ?? '#ff8a3d'}</code>
+        <a href="/dashboard/settings" class="link-btn" style="margin-inline-start:.4rem">تعديل</a>
+      </li>
+      <li>
+        اللوجو: <strong>{settings?.logo_url ? 'مرفوع' : 'مفيش'}</strong>
+      </li>
+    </ul>
+  </section>
+</Dashboard>

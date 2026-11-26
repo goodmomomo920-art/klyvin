@@ -1,0 +1,168 @@
+---
+/** Merchant login. */
+import Layout from '../layouts/Layout.astro';
+import { verifyPassword } from '../lib/auth/password';
+import { newSessionToken } from '../lib/ids';
+import { createMerchantSession, MERCHANT_COOKIE } from '../lib/auth/session';
+import { str, isEmail, redirect } from '../lib/http';
+
+if (Astro.locals.merchant) return redirect('/dashboard');
+
+let error = Astro.url.searchParams.get('error') ?? '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const email = str(form.get('email')).toLowerCase();
+  const password = str(form.get('password'));
+
+  if (!isEmail(email) || !password) {
+    error = 'اكتب الإيميل والباسورد.';
+  } else {
+    const row = await Astro.locals.db
+      .prepare('SELECT id, password_hash FROM merchants WHERE email = ?1')
+      .bind(email)
+      .first<{ id: string; password_hash: string }>();
+
+    // Same message whether the email is unknown or the password is wrong, so
+    // the form cannot be used to discover which emails have accounts.
+    if (!row || !(await verifyPassword(password, row.password_hash))) {
+      error = 'الإيميل أو الباسورد غلط.';
+    } else {
+      const token = newSessionToken();
+      await createMerchantSession(Astro.locals.db, row.id, token);
+      Astro.cookies.set(MERCHANT_COOKIE, token, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30,
+      });
+      return redirect('/dashboard');
+    }
+  }
+}
+---
+
+<Layout title="تسجيل الدخول — Klyvin">
+  <main class="auth">
+    <div class="auth-card">
+      <a href="/" class="auth-logo">
+        <img src="/brand/wordmark.png" alt="Klyvin" width="132" height="88" />
+      </a>
+
+      <h1>تسجيل الدخول</h1>
+      <p class="auth-sub">ادخل على لوحة تحكم متجرك.</p>
+
+      {error && <p class="alert alert--error">{error}</p>}
+
+      <form method="POST" class="auth-form">
+        <label>
+          الإيميل
+          <input name="email" type="email" required autocomplete="email" dir="ltr" />
+        </label>
+
+        <label>
+          الباسورد
+          <input name="password" type="password" required autocomplete="current-password" dir="ltr" />
+        </label>
+
+        <button type="submit" class="btn btn--orange btn--block">دخول</button>
+      </form>
+
+      <p class="auth-foot">
+        معندكش حساب؟ <a href="/register">اعمل واحد</a>
+      </p>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .auth {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    padding: 2rem 1.25rem;
+    background: var(--paper);
+  }
+
+  .auth-card {
+    width: min(420px, 100%);
+    padding: 2rem;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 30px 60px -40px rgba(10, 10, 10, 0.4);
+  }
+
+  .auth-logo {
+    display: inline-block;
+    margin-block-end: 1rem;
+  }
+
+  .auth-logo img {
+    width: 110px;
+    height: auto;
+  }
+
+  h1 {
+    font-family: var(--font-head);
+    font-size: 1.5rem;
+    font-weight: 800;
+  }
+
+  .auth-sub {
+    margin-block: 0.3rem 1.4rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .auth-form {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .auth-form label {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  .auth-form input {
+    padding: 0.72rem 0.9rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    font: inherit;
+    font-size: 0.92rem;
+  }
+
+  .auth-form input:focus {
+    outline: 2px solid var(--ember);
+    outline-offset: 1px;
+    border-color: transparent;
+  }
+
+  .auth-foot {
+    margin-block-start: 1.2rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+  }
+
+  .auth-foot a {
+    color: var(--ember-deep);
+    font-weight: 800;
+  }
+
+  .alert {
+    margin-block-end: 1rem;
+    padding: 0.7rem 0.9rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .alert--error {
+    background: #fef2f2;
+    color: #b91c1c;
+  }
+</style>

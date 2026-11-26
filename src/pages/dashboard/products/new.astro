@@ -1,0 +1,86 @@
+---
+/** Create a product. */
+import Dashboard from '../../../layouts/Dashboard.astro';
+import ProductForm from '../../../components/ProductForm.astro';
+import { dashboardContext } from '../../../lib/dashboard';
+import { newId } from '../../../lib/ids';
+import { str, bool, int, redirect } from '../../../lib/http';
+import { parsePriceToCents } from '../../../lib/format';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect('/login');
+
+const { db, currency } = ctx;
+
+const categories = await db.all<{ id: string; name_ar: string }>(
+  'SELECT id, name_ar FROM categories WHERE store_id = ?1 ORDER BY sort_order, name_ar',
+);
+
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+
+  const nameAr = str(form.get('name_ar'));
+  const priceCents = parsePriceToCents(str(form.get('price')));
+  const compareCents = parsePriceToCents(str(form.get('compare')));
+  const stockRaw = str(form.get('stock'));
+  const kind = str(form.get('kind')) === 'digital' ? 'digital' : 'physical';
+  const categoryId = str(form.get('category_id')) || null;
+  const description = str(form.get('description')) || null;
+  const colors = str(form.get('colors')) || null;
+  const sizes = str(form.get('sizes')) || null;
+  const imageUrl = str(form.get('image_url')) || null;
+  const isActive = bool(form.get('is_active'));
+
+  if (nameAr.length < 2) error = 'اسم المنتج قصير جدًا.';
+  else if (priceCents === null) error = 'السعر مش صح. اكتب رقم زي 250 أو 250.50.';
+  else if (compareCents !== null && compareCents <= priceCents) {
+    error = 'السعر قبل الخصم لازم يكون أكبر من السعر الحالي.';
+  }
+
+  if (!error) {
+    const productId = newId('prd');
+
+    await db.run(
+      `INSERT INTO products
+        (store_id, id, category_id, kind, name_ar, description, price_cents, compare_cents,
+         stock, colors, sizes, is_active)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+      [
+        productId,
+        categoryId,
+        kind,
+        nameAr,
+        description,
+        priceCents,
+        compareCents,
+        stockRaw === '' ? null : int(stockRaw, 0),
+        colors,
+        sizes,
+        isActive ? 1 : 0,
+      ],
+    );
+
+    if (imageUrl) {
+      await db.run(
+        'INSERT INTO product_images (store_id, id, product_id, url, sort_order) VALUES (?1, ?2, ?3, ?4, ?5)',
+        [newId('img'), productId, imageUrl, 0],
+      );
+    }
+
+    return redirect('/dashboard/products');
+  }
+}
+---
+
+<Dashboard title="منتج جديد">
+  <header class="dash-head">
+    <div>
+      <h1>منتج جديد</h1>
+      <p>املأ البيانات واضغط إضافة.</p>
+    </div>
+  </header>
+
+  <ProductForm mode="new" categories={categories} error={error} currency={currency} />
+</Dashboard>

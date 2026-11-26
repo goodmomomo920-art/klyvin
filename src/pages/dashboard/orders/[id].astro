@@ -1,0 +1,249 @@
+---
+/** Order detail: items, customer, status change, payment confirmation. */
+import Dashboard from '../../../layouts/Dashboard.astro';
+import { dashboardContext } from '../../../lib/dashboard';
+import { money, arabicDate } from '../../../lib/format';
+import { str, redirect } from '../../../lib/http';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect('/login');
+
+const { db, currency } = ctx;
+const id = Astro.params.id!;
+
+const order = await db.first<{
+  id: string;
+  reference: string;
+  status_id: string;
+  subtotal_cents: number;
+  shipping_cents: number;
+  total_cents: number;
+  payment_method: string;
+  payment_status: string;
+  shipping_name: string | null;
+  shipping_phone: string | null;
+  shipping_address: string | null;
+  notes: string | null;
+  created_at: string;
+}>('SELECT * FROM orders WHERE store_id = ?1 AND id = ?2', [id]);
+
+if (!order) return Astro.redirect('/dashboard/orders');
+
+const statuses = await db.all<{ id: string; name_ar: string }>(
+  'SELECT id, name_ar FROM order_statuses WHERE store_id = ?1 ORDER BY sort_order',
+);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = str(form.get('action'));
+
+  if (action === 'status') {
+    const statusId = str(form.get('status_id'));
+    const valid = statuses.some((s) => s.id === statusId);
+    if (valid) {
+      await db.run(
+        `UPDATE orders SET status_id = ?2, updated_at = datetime('now')
+          WHERE store_id = ?1 AND id = ?3`,
+        [statusId, id],
+      );
+    }
+  } else if (action === 'payment') {
+    const next = str(form.get('payment_status'));
+    if (['pending', 'confirmed', 'failed'].includes(next)) {
+      await db.run(
+        `UPDATE orders SET payment_status = ?2, updated_at = datetime('now')
+          WHERE store_id = ?1 AND id = ?3`,
+        [next, id],
+      );
+    }
+  }
+
+  return redirect(`/dashboard/orders/${id}`);
+}
+
+const items = await db.all<{
+  id: string;
+  name_snapshot: string;
+  unit_price_cents: number;
+  quantity: number;
+  color: string | null;
+  size: string | null;
+}>(
+  'SELECT id, name_snapshot, unit_price_cents, quantity, color, size FROM order_items WHERE store_id = ?1 AND order_id = ?2',
+  [id],
+);
+
+const paymentLabel: Record<string, string> = {
+  pending: 'في انتظار الدفع',
+  confirmed: 'تم الدفع',
+  failed: 'فشل الدفع',
+};
+
+const methodLabel: Record<string, string> = {
+  cash: 'كاش عند الاستلام',
+  pos: 'ماكينة POS',
+  vodafone_cash: 'فودافون كاش',
+  instapay: 'إنستاباي',
+};
+---
+
+<Dashboard title={`طلب ${order.reference}`}>
+  <header class="dash-head">
+    <div>
+      <h1>طلب {order.reference}</h1>
+      <p>{arabicDate(order.created_at)}</p>
+    </div>
+    <a href="/dashboard/orders" class="btn btn--ghost btn--sm">كل الطلبات</a>
+  </header>
+
+  <div class="order-grid">
+    <div class="panel">
+      <h2>المنتجات</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>المنتج</th>
+              <th>السعر</th>
+              <th>الكمية</th>
+              <th>الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              items.map((item) => (
+                <tr>
+                  <td>
+                    {item.name_snapshot}
+                    {(item.color || item.size) && (
+                      <span class="line-meta">
+                        {' '}
+                        — {[item.color, item.size].filter(Boolean).join(' / ')}
+                      </span>
+                    )}
+                  </td>
+                  <td>{money(item.unit_price_cents, currency)}</td>
+                  <td>{item.quantity}</td>
+                  <td>{money(item.unit_price_cents * item.quantity, currency)}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="totals">
+        <div class="summary-row">
+          <span>المنتجات</span>
+          <span>{money(order.subtotal_cents, currency)}</span>
+        </div>
+        <div class="summary-row">
+          <span>الشحن</span>
+          <span>{money(order.shipping_cents, currency)}</span>
+        </div>
+        <div class="summary-row summary-row--total">
+          <span>الإجمالي</span>
+          <span>{money(order.total_cents, currency)}</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>الحالة</h2>
+        <form method="POST" class="field">
+          <input type="hidden" name="action" value="status" />
+          <select name="status_id">
+            {
+              statuses.map((status) => (
+                <option value={status.id} selected={status.id === order.status_id}>
+                  {status.name_ar}
+                </option>
+              ))
+            }
+          </select>
+          <button type="submit" class="btn btn--dark btn--sm">تحديث الحالة</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>الدفع</h2>
+        <p class="line-meta" style="margin-block-end:.6rem">
+          الطريقة: {methodLabel[order.payment_method] ?? order.payment_method}
+        </p>
+        <p style="margin-block-end:.8rem">
+          <span class={order.payment_status === 'confirmed' ? 'tag tag--ok' : 'tag tag--warn'}>
+            {paymentLabel[order.payment_status] ?? order.payment_status}
+          </span>
+        </p>
+        <form method="POST" class="pay-actions">
+          <input type="hidden" name="action" value="payment" />
+          <input type="hidden" name="payment_status" value="confirmed" />
+          <button type="submit" class="btn btn--orange btn--sm">تأكيد استلام المبلغ</button>
+        </form>
+      </div>
+
+      <div class="panel">
+        <h2>بيانات التوصيل</h2>
+        <dl class="details">
+          <dt>الاسم</dt>
+          <dd>{order.shipping_name ?? '—'}</dd>
+          <dt>الموبايل</dt>
+          <dd dir="ltr">{order.shipping_phone ?? '—'}</dd>
+          <dt>العنوان</dt>
+          <dd>{order.shipping_address ?? '—'}</dd>
+          {order.notes && (
+            <>
+              <dt>ملاحظات</dt>
+              <dd>{order.notes}</dd>
+            </>
+          )}
+        </dl>
+      </div>
+    </div>
+  </div>
+</Dashboard>
+
+<style>
+  .order-grid {
+    display: grid;
+    grid-template-columns: 1.7fr 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .totals {
+    display: grid;
+    gap: 0.4rem;
+    margin-block-start: 1rem;
+    padding-block-start: 0.8rem;
+    border-block-start: 1px solid var(--line);
+  }
+
+  .details {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.4rem 0.8rem;
+    margin: 0;
+    font-size: 0.88rem;
+  }
+
+  .details dt {
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  .details dd {
+    margin: 0;
+  }
+
+  .pay-actions {
+    display: grid;
+  }
+
+  @media (max-width: 860px) {
+    .order-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

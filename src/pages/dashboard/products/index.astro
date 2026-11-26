@@ -1,0 +1,121 @@
+---
+/** Product list with inline activate/deactivate and delete. */
+import Dashboard from '../../../layouts/Dashboard.astro';
+import { dashboardContext } from '../../../lib/dashboard';
+import { money } from '../../../lib/format';
+import { str, redirect } from '../../../lib/http';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect('/login');
+
+const { db, currency } = ctx;
+
+interface ProductRow {
+  id: string;
+  name_ar: string;
+  price_cents: number;
+  stock: number | null;
+  kind: string;
+  is_active: number;
+  category_name: string | null;
+  image_url: string | null;
+}
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = str(form.get('action'));
+  const id = str(form.get('id'));
+
+  if (action === 'toggle' && id) {
+    await db.run(
+      `UPDATE products SET is_active = CASE is_active WHEN 1 THEN 0 ELSE 1 END,
+              updated_at = datetime('now')
+        WHERE store_id = ?1 AND id = ?2`,
+      [id],
+    );
+  } else if (action === 'delete' && id) {
+    await db.run('DELETE FROM products WHERE store_id = ?1 AND id = ?2', [id]);
+  }
+
+  return redirect('/dashboard/products');
+}
+
+const products = await db.all<ProductRow>(
+  `SELECT p.id, p.name_ar, p.price_cents, p.stock, p.kind, p.is_active,
+          c.name_ar AS category_name,
+          (SELECT url FROM product_images i
+            WHERE i.store_id = p.store_id AND i.product_id = p.id
+            ORDER BY i.sort_order LIMIT 1) AS image_url
+     FROM products p
+     LEFT JOIN categories c ON c.id = p.category_id AND c.store_id = p.store_id
+    WHERE p.store_id = ?1
+    ORDER BY p.created_at DESC`,
+);
+---
+
+<Dashboard title="المنتجات">
+  <header class="dash-head">
+    <div>
+      <h1>المنتجات</h1>
+      <p>{products.length} منتج في متجرك.</p>
+    </div>
+    <a href="/dashboard/products/new" class="btn btn--orange btn--sm">+ منتج جديد</a>
+  </header>
+
+  <div class="panel">
+    {
+      products.length === 0 ? (
+        <p class="empty">مفيش منتجات لسه. اضغط "منتج جديد" وابدأ.</p>
+      ) : (
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>المنتج</th>
+                <th>القسم</th>
+                <th>السعر</th>
+                <th>المخزون</th>
+                <th>الحالة</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((product) => (
+                <tr>
+                  <td>
+                    <a href={`/dashboard/products/${product.id}`}>{product.name_ar}</a>
+                    {product.kind === 'digital' && <span class="tag" style="margin-inline-start:.4rem">رقمي</span>}
+                  </td>
+                  <td>{product.category_name ?? '—'}</td>
+                  <td>{money(product.price_cents, currency)}</td>
+                  <td>{product.stock === null ? '∞' : product.stock}</td>
+                  <td>
+                    <span class={product.is_active ? 'tag tag--ok' : 'tag tag--off'}>
+                      {product.is_active ? 'ظاهر' : 'مخفي'}
+                    </span>
+                  </td>
+                  <td>
+                    <div style="display:flex;gap:.3rem;justify-content:flex-end">
+                      <form method="POST">
+                        <input type="hidden" name="action" value="toggle" />
+                        <input type="hidden" name="id" value={product.id} />
+                        <button type="submit" class="link-btn" style="color:var(--muted)">
+                          {product.is_active ? 'إخفاء' : 'إظهار'}
+                        </button>
+                      </form>
+                      <form method="POST">
+                        <input type="hidden" name="action" value="delete" />
+                        <input type="hidden" name="id" value={product.id} />
+                        <button type="submit" class="link-btn">حذف</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </div>
+</Dashboard>

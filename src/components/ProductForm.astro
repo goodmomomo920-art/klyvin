@@ -1,0 +1,152 @@
+---
+/**
+ * Product create/edit form.
+ * Shared by /dashboard/products/new and /dashboard/products/[id].
+ */
+
+interface Category {
+  id: string;
+  name_ar: string;
+}
+
+interface Product {
+  id: string;
+  name_ar: string;
+  name_en: string | null;
+  description: string | null;
+  price_cents: number;
+  compare_cents: number | null;
+  stock: number | null;
+  kind: string;
+  category_id: string | null;
+  colors: string | null;
+  sizes: string | null;
+  is_active: number;
+}
+
+interface Props {
+  mode: 'new' | 'edit';
+  categories: Category[];
+  product?: Product;
+  error?: string;
+  currency: string;
+}
+
+const { mode, categories, product, error, currency } = Astro.props;
+
+const priceValue = product ? (product.price_cents / 100).toFixed(2).replace(/\.00$/, '') : '';
+const compareValue = product?.compare_cents
+  ? (product.compare_cents / 100).toFixed(2).replace(/\.00$/, '')
+  : '';
+---
+
+{error && <p class="alert alert--error">{error}</p>}
+
+<form method="POST" class="panel product-form">
+  <div class="field">
+    <label for="name_ar">اسم المنتج</label>
+    <input id="name_ar" name="name_ar" type="text" required value={product?.name_ar ?? ''} placeholder="تيشيرت قطن" />
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label for="price">السعر ({currency})</label>
+      <input id="price" name="price" type="text" inputmode="decimal" required value={priceValue} placeholder="250" dir="ltr" />
+    </div>
+
+    <div class="field">
+      <label for="compare">السعر قبل الخصم <small>(اختياري)</small></label>
+      <input id="compare" name="compare" type="text" inputmode="decimal" value={compareValue} placeholder="300" dir="ltr" />
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label for="kind">نوع المنتج</label>
+      <select id="kind" name="kind">
+        <option value="physical" selected={product?.kind !== 'digital'}>منتج ملموس</option>
+        <option value="digital" selected={product?.kind === 'digital'}>منتج رقمي</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="category">القسم</label>
+      <select id="category" name="category_id">
+        <option value="">بدون قسم</option>
+        {categories.map((category) => (
+          <option value={category.id} selected={product?.category_id === category.id}>
+            {category.name_ar}
+          </option>
+        ))}
+      </select>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="stock">المخزون <small>(سيبه فاضي لو غير محدود)</small></label>
+    <input id="stock" name="stock" type="number" min="0" value={product?.stock ?? ''} placeholder="20" dir="ltr" />
+  </div>
+
+  <div class="grid-2">
+    <div class="field">
+      <label for="colors">الألوان <small>(بينهم فاصلة)</small></label>
+      <input id="colors" name="colors" type="text" value={product?.colors ?? ''} placeholder="أسود, أبيض, بيج" />
+    </div>
+
+    <div class="field">
+      <label for="sizes">المقاسات <small>(بينهم فاصلة)</small></label>
+      <input id="sizes" name="sizes" type="text" value={product?.sizes ?? ''} placeholder="S, M, L, XL" dir="ltr" />
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="description">الوصف</label>
+    <textarea id="description" name="description" placeholder="اكتب تفاصيل المنتج...">{product?.description ?? ''}</textarea>
+  </div>
+
+  <div class="field">
+    <label for="image">رابط الصورة <small>(سيبه فاضي لو مفيش)</small></label>
+    <input id="image" name="image_url" type="url" value="" placeholder="https://..." dir="ltr" />
+  </div>
+
+  <label class="check">
+    <input type="checkbox" name="is_active" checked={product ? product.is_active === 1 : true} />
+    <span>المنتج ظاهر في المتجر</span>
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn--orange btn--sm">
+      {mode === 'new' ? 'إضافة المنتج' : 'حفظ التغييرات'}
+    </button>
+    <a href="/dashboard/products" class="btn btn--ghost btn--sm">إلغاء</a>
+  </div>
+</form>
+
+<style>
+  .product-form {
+    display: grid;
+    gap: 0.9rem;
+    max-width: 720px;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .check input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--ember-deep);
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 0.6rem;
+    padding-block-start: 0.4rem;
+  }
+</style>

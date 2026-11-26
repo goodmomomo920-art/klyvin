@@ -1,0 +1,123 @@
+---
+/** Merchant dashboard overview. */
+import Dashboard from '../../layouts/Dashboard.astro';
+import { money } from '../../lib/format';
+import { dashboardContext } from '../../lib/dashboard';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect(Astro.locals.merchant ? '/register' : '/login');
+
+const { merchant, db, currency } = ctx;
+
+const [productCount, orderCount, revenue, pending] = await Promise.all([
+  db.first<{ n: number }>('SELECT COUNT(*) AS n FROM products WHERE store_id = ?1'),
+  db.first<{ n: number }>('SELECT COUNT(*) AS n FROM orders WHERE store_id = ?1'),
+  db.first<{ n: number }>(
+    `SELECT COALESCE(SUM(total_cents), 0) AS n
+       FROM orders WHERE store_id = ?1 AND payment_status = 'confirmed'`,
+  ),
+  db.first<{ n: number }>(
+    `SELECT COUNT(*) AS n
+       FROM orders o
+       JOIN order_statuses s ON s.id = o.status_id AND s.store_id = o.store_id
+      WHERE o.store_id = ?1 AND s.kind = 'open'`,
+  ),
+]);
+
+const recent = await db.all<{
+  id: string;
+  reference: string;
+  total_cents: number;
+  created_at: string;
+  status: string;
+}>(
+  `SELECT o.id, o.reference, o.total_cents, o.created_at, s.name_ar AS status
+     FROM orders o
+     JOIN order_statuses s ON s.id = o.status_id AND s.store_id = o.store_id
+    WHERE o.store_id = ?1
+    ORDER BY o.created_at DESC
+    LIMIT 6`,
+);
+
+const hasProducts = (productCount?.n ?? 0) > 0;
+---
+
+<Dashboard title="نظرة عامة">
+  <header class="dash-head">
+    <div>
+      <h1>أهلاً، {merchant.name.split(' ')[0]}</h1>
+      <p>ده ملخص متجرك النهارده.</p>
+    </div>
+    <a href="/dashboard/products/new" class="btn btn--orange btn--sm">+ منتج جديد</a>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <span>المنتجات</span>
+      <strong>{productCount?.n ?? 0}</strong>
+    </div>
+    <div class="stat">
+      <span>الطلبات</span>
+      <strong>{orderCount?.n ?? 0}</strong>
+    </div>
+    <div class="stat">
+      <span>المبيعات المؤكدة</span>
+      <strong>{money(revenue?.n ?? 0, currency)}</strong>
+    </div>
+    <div class="stat">
+      <span>طلبات محتاجة متابعة</span>
+      <strong>{pending?.n ?? 0}</strong>
+    </div>
+  </div>
+
+  {
+    !hasProducts && (
+      <div class="panel">
+        <h2>ابدأ بأول منتج</h2>
+        <p style="color: var(--muted); font-size: 0.9rem; margin-block-end: 0.9rem;">
+          متجرك جاهز بس لسه فاضي. ضيف منتج واحد على الأقل عشان الزباين يشوفوه.
+        </p>
+        <a href="/dashboard/products/new" class="btn btn--orange btn--sm">
+          ضيف منتج
+        </a>
+      </div>
+    )
+  }
+
+  <div class="panel">
+    <h2>آخر الطلبات</h2>
+
+    {
+      recent.length === 0 ? (
+        <p class="empty">لسه مفيش طلبات.</p>
+      ) : (
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>الطلب</th>
+                <th>الحالة</th>
+                <th>الإجمالي</th>
+                <th>التاريخ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recent.map((order) => (
+                <tr>
+                  <td>
+                    <a href={`/dashboard/orders/${order.id}`}>{order.reference}</a>
+                  </td>
+                  <td>
+                    <span class="tag">{order.status}</span>
+                  </td>
+                  <td>{money(order.total_cents, currency)}</td>
+                  <td>{order.created_at.slice(0, 10)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </div>
+</Dashboard>

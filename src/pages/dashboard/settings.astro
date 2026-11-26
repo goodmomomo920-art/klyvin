@@ -1,0 +1,151 @@
+---
+/** Store settings: identity, contact, currency, price visibility. */
+import Dashboard from '../../layouts/Dashboard.astro';
+import { dashboardContext } from '../../lib/dashboard';
+import { str, bool, redirect } from '../../lib/http';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect('/login');
+
+const { db, store } = ctx;
+
+const settings = await db.first<{
+  tagline: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  address: string | null;
+  currency: string;
+  theme_color: string;
+  show_prices: number;
+}>(
+  `SELECT tagline, phone, whatsapp, email, address, currency, theme_color, show_prices
+     FROM store_settings WHERE store_id = ?1`,
+);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+
+  await db.run(
+    `UPDATE store_settings
+        SET tagline = ?2, phone = ?3, whatsapp = ?4, email = ?5, address = ?6,
+            currency = ?7, theme_color = ?8, show_prices = ?9,
+            updated_at = datetime('now')
+      WHERE store_id = ?1`,
+    [
+      str(form.get('tagline')) || null,
+      str(form.get('phone')) || null,
+      str(form.get('whatsapp')) || null,
+      str(form.get('email')) || null,
+      str(form.get('address')) || null,
+      str(form.get('currency')) || 'EGP',
+      str(form.get('theme_color')) || '#ff8a3d',
+      bool(form.get('show_prices')) ? 1 : 0,
+    ],
+  );
+
+  return redirect('/dashboard/settings?saved=1');
+}
+
+const saved = Astro.url.searchParams.get('saved') === '1';
+---
+
+<Dashboard title="إعدادات المتجر">
+  <header class="dash-head">
+    <div>
+      <h1>إعدادات المتجر</h1>
+      <p>رابط متجرك: <code dir="ltr">/{store.slug}</code></p>
+    </div>
+  </header>
+
+  {saved && <p class="alert alert--ok">تم الحفظ.</p>}
+
+  <form method="POST" class="panel settings-form">
+    <div class="field">
+      <label for="tagline">وصف قصير</label>
+      <input id="tagline" name="tagline" type="text" value={settings?.tagline ?? ''} placeholder="أحلى تيشيرتات في مصر" />
+    </div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label for="phone">رقم الموبايل</label>
+        <input id="phone" name="phone" type="tel" value={settings?.phone ?? ''} placeholder="01012345678" dir="ltr" />
+      </div>
+
+      <div class="field">
+        <label for="whatsapp">واتساب</label>
+        <input id="whatsapp" name="whatsapp" type="tel" value={settings?.whatsapp ?? ''} placeholder="01012345678" dir="ltr" />
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="field">
+        <label for="email">إيميل المتجر</label>
+        <input id="email" name="email" type="email" value={settings?.email ?? ''} dir="ltr" />
+      </div>
+
+      <div class="field">
+        <label for="currency">العملة</label>
+        <select id="currency" name="currency">
+          <option value="EGP" selected={settings?.currency === 'EGP'}>جنيه مصري (ج.م)</option>
+          <option value="SAR" selected={settings?.currency === 'SAR'}>ريال سعودي (ر.س)</option>
+          <option value="AED" selected={settings?.currency === 'AED'}>درهم إماراتي (د.إ)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="address">العنوان</label>
+      <input id="address" name="address" type="text" value={settings?.address ?? ''} placeholder="القاهرة، مدينة نصر" />
+    </div>
+
+    <div class="field">
+      <label for="theme_color">لون المتجر</label>
+      <input id="theme_color" name="theme_color" type="color" value={settings?.theme_color ?? '#ff8a3d'} />
+    </div>
+
+    <label class="check">
+      <input type="checkbox" name="show_prices" checked={settings?.show_prices !== 0} />
+      <span>إظهار الأسعار في المتجر</span>
+    </label>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--orange btn--sm">حفظ</button>
+    </div>
+  </form>
+</Dashboard>
+
+<style>
+  .settings-form {
+    display: grid;
+    gap: 0.9rem;
+    max-width: 640px;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .check input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--ember-deep);
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  code {
+    padding: 0.1rem 0.4rem;
+    border-radius: 6px;
+    background: var(--paper);
+    font-size: 0.85em;
+  }
+</style>

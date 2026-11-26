@@ -1,0 +1,116 @@
+---
+/** Edit an existing product. */
+import Dashboard from '../../../layouts/Dashboard.astro';
+import ProductForm from '../../../components/ProductForm.astro';
+import { dashboardContext } from '../../../lib/dashboard';
+import { newId } from '../../../lib/ids';
+import { str, bool, int, redirect } from '../../../lib/http';
+import { parsePriceToCents } from '../../../lib/format';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect('/login');
+
+const { db, currency } = ctx;
+const id = Astro.params.id!;
+
+const product = await db.first<{
+  id: string;
+  name_ar: string;
+  name_en: string | null;
+  description: string | null;
+  price_cents: number;
+  compare_cents: number | null;
+  stock: number | null;
+  kind: string;
+  category_id: string | null;
+  colors: string | null;
+  sizes: string | null;
+  is_active: number;
+}>('SELECT * FROM products WHERE store_id = ?1 AND id = ?2', [id]);
+
+if (!product) return Astro.redirect('/dashboard/products');
+
+const categories = await db.all<{ id: string; name_ar: string }>(
+  'SELECT id, name_ar FROM categories WHERE store_id = ?1 ORDER BY sort_order, name_ar',
+);
+
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+
+  const nameAr = str(form.get('name_ar'));
+  const priceCents = parsePriceToCents(str(form.get('price')));
+  const compareCents = parsePriceToCents(str(form.get('compare')));
+  const stockRaw = str(form.get('stock'));
+  const kind = str(form.get('kind')) === 'digital' ? 'digital' : 'physical';
+  const categoryId = str(form.get('category_id')) || null;
+  const description = str(form.get('description')) || null;
+  const colors = str(form.get('colors')) || null;
+  const sizes = str(form.get('sizes')) || null;
+  const imageUrl = str(form.get('image_url')) || null;
+  const isActive = bool(form.get('is_active'));
+
+  if (nameAr.length < 2) error = 'اسم المنتج قصير جدًا.';
+  else if (priceCents === null) error = 'السعر مش صح.';
+  else if (compareCents !== null && compareCents <= priceCents) {
+    error = 'السعر قبل الخصم لازم يكون أكبر من السعر الحالي.';
+  }
+
+  if (!error) {
+    await db.run(
+      `UPDATE products
+          SET category_id = ?2, kind = ?3, name_ar = ?4, description = ?5,
+              price_cents = ?6, compare_cents = ?7, stock = ?8, colors = ?9,
+              sizes = ?10, is_active = ?11, updated_at = datetime('now')
+        WHERE store_id = ?1 AND id = ?12`,
+      [
+        categoryId,
+        kind,
+        nameAr,
+        description,
+        priceCents,
+        compareCents,
+        stockRaw === '' ? null : int(stockRaw, 0),
+        colors,
+        sizes,
+        isActive ? 1 : 0,
+        id,
+      ],
+    );
+
+    if (imageUrl) {
+      const existing = await db.first<{ id: string }>(
+        'SELECT id FROM product_images WHERE store_id = ?1 AND product_id = ?2 LIMIT 1',
+        [id],
+      );
+
+      if (existing) {
+        await db.run(
+          'UPDATE product_images SET url = ?3 WHERE store_id = ?1 AND product_id = ?2',
+          [id, imageUrl],
+        );
+      } else {
+        await db.run(
+          'INSERT INTO product_images (store_id, id, product_id, url, sort_order) VALUES (?1, ?2, ?3, ?4, ?5)',
+          [newId('img'), id, imageUrl, 0],
+        );
+      }
+    }
+
+    return redirect('/dashboard/products');
+  }
+}
+---
+
+<Dashboard title="تعديل منتج">
+  <header class="dash-head">
+    <div>
+      <h1>تعديل: {product.name_ar}</h1>
+      <p>عدّل اللي تحبه واحفظ.</p>
+    </div>
+    <a href={`/dashboard/products/${id}`} class="btn btn--ghost btn--sm">تحديث</a>
+  </header>
+
+  <ProductForm mode="edit" categories={categories} product={product} error={error} currency={currency} />
+</Dashboard>

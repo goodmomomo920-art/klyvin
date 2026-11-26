@@ -1,0 +1,70 @@
+---
+/**
+ * Dashboard shell: sidebar + content area.
+ * Guarded here so every child page is protected by default.
+ */
+import Layout from './Layout.astro';
+import { redirect } from '../lib/http';
+
+const merchant = Astro.locals.merchant;
+if (!merchant) return redirect('/login');
+
+const db = Astro.locals.db;
+const store = await db
+  .prepare('SELECT id, slug, name FROM stores WHERE merchant_id = ?1 ORDER BY created_at LIMIT 1')
+  .bind(merchant.merchantId)
+  .first<{ id: string; slug: string; name: string }>();
+
+if (!store) return redirect('/register');
+
+const path = Astro.url.pathname;
+
+const links = [
+  { href: '/dashboard', label: 'نظرة عامة' },
+  { href: '/dashboard/products', label: 'المنتجات' },
+  { href: '/dashboard/categories', label: 'الأقسام' },
+  { href: '/dashboard/orders', label: 'الطلبات' },
+  { href: '/dashboard/settings', label: 'إعدادات المتجر' },
+];
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<Layout title={`${title} — Klyvin`}>
+  <div class="dash">
+    <aside class="dash-side">
+      <div class="dash-brand">
+        <img src="/brand/icon.png" alt="" width="26" height="26" />
+        <div>
+          <strong>{store.name}</strong>
+          <span>{store.slug}</span>
+        </div>
+      </div>
+
+      <nav class="dash-nav">
+        {
+          links.map((link) => (
+            <a href={link.href} aria-current={path === link.href ? 'page' : undefined}>
+              {link.label}
+            </a>
+          ))
+        }
+      </nav>
+
+      <div class="dash-side-foot">
+        <a href="/dashboard/storefront">معاينة المتجر ↗</a>
+        <form method="POST" action="/logout">
+          <button type="submit">تسجيل الخروج</button>
+        </form>
+      </div>
+    </aside>
+
+    <main class="dash-main">
+      <slot />
+    </main>
+  </div>
+</Layout>

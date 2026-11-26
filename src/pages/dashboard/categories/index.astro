@@ -1,0 +1,113 @@
+---
+/** Categories management. */
+import Dashboard from '../../../layouts/Dashboard.astro';
+import { dashboardContext } from '../../../lib/dashboard';
+import { newId, slugify } from '../../../lib/ids';
+import { str, int, redirect } from '../../../lib/http';
+
+const ctx = await dashboardContext(Astro.locals);
+if (!ctx) return Astro.redirect('/login');
+
+const { db } = ctx;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = str(form.get('action'));
+
+  if (action === 'create') {
+    const name = str(form.get('name_ar'));
+    if (name.length >= 2) {
+      let slug = slugify(name) || newId('cat', 6);
+      const taken = await db.first<{ id: string }>(
+        'SELECT id FROM categories WHERE store_id = ?1 AND slug = ?2',
+        [slug],
+      );
+      if (taken) slug = `${slug}-${newId('', 4).slice(1)}`;
+
+      await db.run(
+        'INSERT INTO categories (store_id, id, name_ar, slug, sort_order) VALUES (?1, ?2, ?3, ?4, ?5)',
+        [newId('cat'), name, slug, int(form.get('sort_order'), 0)],
+      );
+    }
+  } else if (action === 'delete') {
+    await db.run('DELETE FROM categories WHERE store_id = ?1 AND id = ?2', [str(form.get('id'))]);
+  }
+
+  return redirect('/dashboard/categories');
+}
+
+const categories = await db.all<{ id: string; name_ar: string; sort_order: number; count: number }>(
+  `SELECT c.id, c.name_ar, c.sort_order,
+          (SELECT COUNT(*) FROM products p
+            WHERE p.store_id = c.store_id AND p.category_id = c.id) AS count
+     FROM categories c
+    WHERE c.store_id = ?1
+    ORDER BY c.sort_order, c.name_ar`,
+);
+---
+
+<Dashboard title="الأقسام">
+  <header class="dash-head">
+    <div>
+      <h1>الأقسام</h1>
+      <p>قسّم منتجاتك عشان الزبون يلاقي اللي بيدور عليه.</p>
+    </div>
+  </header>
+
+  <div class="panel">
+    <h2>إضافة قسم</h2>
+    <form method="POST" class="inline-form">
+      <input type="hidden" name="action" value="create" />
+      <div class="field" style="flex:1">
+        <label for="cat-name">اسم القسم</label>
+        <input id="cat-name" name="name_ar" type="text" required placeholder="تيشيرتات" />
+      </div>
+      <button type="submit" class="btn btn--orange btn--sm">إضافة</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>الأقسام الحالية</h2>
+    {
+      categories.length === 0 ? (
+        <p class="empty">مفيش أقسام.</p>
+      ) : (
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>القسم</th>
+                <th>عدد المنتجات</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((category) => (
+                <tr>
+                  <td>{category.name_ar}</td>
+                  <td>{category.count}</td>
+                  <td style="text-align:end">
+                    <form method="POST">
+                      <input type="hidden" name="action" value="delete" />
+                      <input type="hidden" name="id" value={category.id} />
+                      <button type="submit" class="link-btn">حذف</button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </div>
+</Dashboard>
+
+<style>
+  .inline-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+</style>
