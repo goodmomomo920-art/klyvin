@@ -1,0 +1,148 @@
+---
+/** Order confirmation / tracking page, reachable by reference. */
+import Storefront from '../../../../layouts/Storefront.astro';
+import { scopeStore } from '../../../../lib/db/store-scope';
+import { money, arabicDate } from '../../../../lib/format';
+
+const store = Astro.locals.store;
+if (!store) return Astro.redirect('/');
+
+const db = scopeStore(Astro.locals.db, store.id);
+const reference = Astro.params.reference!;
+const base = `/s/${store.slug}`;
+
+const order = await db.first<{
+  id: string;
+  reference: string;
+  subtotal_cents: number;
+  shipping_cents: number;
+  total_cents: number;
+  payment_method: string;
+  payment_status: string;
+  shipping_name: string | null;
+  shipping_phone: string | null;
+  shipping_address: string | null;
+  created_at: string;
+  status: string;
+  status_kind: string;
+}>(
+  `SELECT o.*, s.name_ar AS status, s.kind AS status_kind
+     FROM orders o
+     JOIN order_statuses s ON s.id = o.status_id AND s.store_id = o.store_id
+    WHERE o.store_id = ?1 AND o.reference = ?2`,
+  [reference],
+);
+
+if (!order) return new Response('الطلب مش موجود', { status: 404 });
+
+const items = await db.all<{
+  name_snapshot: string;
+  unit_price_cents: number;
+  quantity: number;
+  color: string | null;
+  size: string | null;
+}>(
+  'SELECT name_snapshot, unit_price_cents, quantity, color, size FROM order_items WHERE store_id = ?1 AND order_id = ?2',
+  [order.id],
+);
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'كاش عند الاستلام',
+  pos: 'ماكينة POS',
+  vodafone_cash: 'فودافون كاش',
+  instapay: 'إنستاباي',
+};
+
+const PAYMENT_LABEL: Record<string, string> = {
+  pending: 'في انتظار الدفع',
+  confirmed: 'تم الدفع',
+  failed: 'فشل الدفع',
+};
+---
+
+<Storefront store={store} title={`طلب ${order.reference}`}>
+  <div class="shell" style="padding-block:2rem 3rem">
+    <div class="panel" style="max-width:640px;margin-inline:auto">
+      <p class="tag tag--ok" style="margin-block-end:.8rem">تم استلام طلبك</p>
+      <h1 style="font-family:var(--font-head);font-size:1.4rem;font-weight:800">
+        شكرًا يا {order.shipping_name ?? 'عميلنا'}
+      </h1>
+      <p style="color:var(--muted);font-size:.9rem;margin-block:.4rem 1.2rem">
+        هنكلمك على {order.shipping_phone} لتأكيد التوصيل.
+      </p>
+
+      <dl class="ref-grid">
+        <dt>رقم الطلب</dt>
+        <dd dir="ltr">{order.reference}</dd>
+        <dt>التاريخ</dt>
+        <dd>{arabicDate(order.created_at)}</dd>
+        <dt>الحالة</dt>
+        <dd><span class="tag">{order.status}</span></dd>
+        <dt>الدفع</dt>
+        <dd>
+          {METHOD_LABEL[order.payment_method] ?? order.payment_method} —
+          {PAYMENT_LABEL[order.payment_status] ?? order.payment_status}
+        </dd>
+        <dt>العنوان</dt>
+        <dd>{order.shipping_address}</dd>
+      </dl>
+
+      <div style="margin-block-start:1.2rem;padding-block-start:.8rem;border-block-start:1px solid var(--line)">
+        {
+          items.map((item) => (
+            <div class="summary-row" style="margin-block-end:.4rem">
+              <span>
+                {item.name_snapshot} × {item.quantity}
+                {(item.color || item.size) && (
+                  <small style="color:var(--muted)">
+                    {' '}
+                    ({[item.color, item.size].filter(Boolean).join(' / ')})
+                  </small>
+                )}
+              </span>
+              <span>{store.showPrices ? money(item.unit_price_cents * item.quantity, store.currency) : '—'}</span>
+            </div>
+          ))
+        }
+
+        {
+          store.showPrices && (
+            <>
+              <div class="summary-row">
+                <span>الشحن</span>
+                <span>{order.shipping_cents === 0 ? 'مجانًا' : money(order.shipping_cents, store.currency)}</span>
+              </div>
+              <div class="summary-row summary-row--total">
+                <span>الإجمالي</span>
+                <span>{money(order.total_cents, store.currency)}</span>
+              </div>
+            </>
+          )
+        }
+      </div>
+
+      <a href={base} class="btn btn--ghost btn--sm" style="margin-block-start:1.4rem">
+        رجوع للمتجر
+      </a>
+    </div>
+  </div>
+</Storefront>
+
+<style>
+  .ref-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1rem;
+    margin: 0;
+    font-size: 0.88rem;
+  }
+
+  .ref-grid dt {
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  .ref-grid dd {
+    margin: 0;
+  }
+</style>

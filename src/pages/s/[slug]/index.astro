@@ -1,0 +1,99 @@
+---
+/**
+ * Storefront home: hero, categories, newest products.
+ * Reached at `/s/<slug>`.
+ */
+import Storefront from '../../../layouts/Storefront.astro';
+import { scopeStore } from '../../../lib/db/store-scope';
+import { money } from '../../../lib/format';
+
+const store = Astro.locals.store;
+if (!store) return Astro.redirect('/');
+
+const db = scopeStore(Astro.locals.db, store.id);
+
+const categories = await db.all<{ id: string; name_ar: string; slug: string }>(
+  'SELECT id, name_ar, slug FROM categories WHERE store_id = ?1 ORDER BY sort_order, name_ar',
+);
+
+const products = await db.all<{
+  id: string;
+  name_ar: string;
+  price_cents: number;
+  compare_cents: number | null;
+  stock: number | null;
+  image_url: string | null;
+}>(
+  `SELECT p.id, p.name_ar, p.price_cents, p.compare_cents, p.stock,
+          (SELECT url FROM product_images i
+            WHERE i.store_id = p.store_id AND i.product_id = p.id
+            ORDER BY i.sort_order LIMIT 1) AS image_url
+     FROM products p
+    WHERE p.store_id = ?1 AND p.is_active = 1
+    ORDER BY p.created_at DESC
+    LIMIT 8`,
+);
+
+const base = `/s/${store.slug}`;
+---
+
+<Storefront store={store}>
+  <section class="store-hero">
+    <div class="shell">
+      <h1>{store.name}</h1>
+      {store.tagline && <p>{store.tagline}</p>}
+    </div>
+  </section>
+
+  <div class="shell">
+    {
+      categories.length > 0 && (
+        <div class="cat-row">
+          {categories.map((category) => (
+            <a href={`${base}/products?cat=${category.slug}`} class="cat-chip">
+              {category.name_ar}
+            </a>
+          ))}
+        </div>
+      )
+    }
+
+    {
+      products.length === 0 ? (
+        <p class="empty" style="padding-block:4rem">
+          المتجر لسه بيجهز. ارجع لنا قريب.
+        </p>
+      ) : (
+        <div class="products-grid">
+          {products.map((product) => (
+            <a href={`${base}/p/${product.id}`} class="pcard">
+              <div class="pcard-media">
+                {product.image_url ? (
+                  <img src={product.image_url} alt={product.name_ar} loading="lazy" />
+                ) : (
+                  <span>مفيش صورة</span>
+                )}
+              </div>
+              <div class="pcard-body">
+                <h3>{product.name_ar}</h3>
+                {store.showPrices ? (
+                  <p class="pcard-price">
+                    {money(product.price_cents, store.currency)}
+                    {product.compare_cents && (
+                      <s>{money(product.compare_cents, store.currency)}</s>
+                    )}
+                  </p>
+                ) : (
+                  <p class="pcard-price" style="font-size:.82rem;color:var(--muted)">
+                    اسأل عن السعر
+                  </p>
+                )}
+                {product.stock === 0 && <p class="pcard-out">خلص من المخزن</p>}
+              </div>
+            </a>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</Storefront>

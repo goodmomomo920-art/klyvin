@@ -1,0 +1,146 @@
+---
+/** Cart page: change quantities, remove lines, continue to checkout. */
+import Storefront from '../../../layouts/Storefront.astro';
+import { money } from '../../../lib/format';
+import {
+  CART_COOKIE,
+  parseCart,
+  resolveCart,
+  removeFromCart,
+  setQuantity,
+  serialiseCart,
+} from '../../../lib/cart';
+import { str, redirect } from '../../../lib/http';
+
+const store = Astro.locals.store;
+if (!store) return Astro.redirect('/');
+
+const base = `/s/${store.slug}`;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = str(form.get('action'));
+  const productId = str(form.get('product'));
+  const color = str(form.get('color')) || undefined;
+  const size = str(form.get('size')) || undefined;
+
+  let cart = parseCart(Astro.cookies.get(CART_COOKIE)?.value, store.slug);
+
+  if (action === 'remove') {
+    cart = removeFromCart(cart, productId, color, size);
+  } else if (action === 'quantity') {
+    cart = setQuantity(cart, productId, Number(str(form.get('quantity'))) || 1, color, size);
+  }
+
+  Astro.cookies.set(CART_COOKIE, serialiseCart(cart), {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 14,
+  });
+
+  return redirect(`${base}/cart`);
+}
+
+const cart = parseCart(Astro.cookies.get(CART_COOKIE)?.value, store.slug);
+const resolved = await resolveCart(Astro.locals.db, store.id, cart);
+const purchasable = resolved.lines.filter((line) => line.available);
+---
+
+<Storefront store={store} title="السلة" cartCount={resolved.itemCount}>
+  <div class="shell">
+    {
+      resolved.lines.length === 0 ? (
+        <div style="padding-block:4rem;text-align:center">
+          <p class="empty">السلة فاضية.</p>
+          <a href={`${base}/products`} class="btn btn--orange btn--sm" style="margin-block-start:1rem">
+            تسوق دلوقتي
+          </a>
+        </div>
+      ) : (
+        <div class="two-col">
+          <div class="panel">
+            {resolved.lines.map((line) => (
+              <div class="line-item">
+                <div class="line-thumb">
+                  {line.imageUrl && <img src={line.imageUrl} alt="" />}
+                </div>
+
+                <div>
+                  <h3>
+                    {line.available ? (
+                      <a href={`${base}/p/${line.productId}`}>{line.name}</a>
+                    ) : (
+                      line.name
+                    )}
+                  </h3>
+                  {(line.color || line.size) && (
+                    <p class="line-meta">{[line.color, line.size].filter(Boolean).join(' / ')}</p>
+                  )}
+                  {line.available ? (
+                    <p class="line-meta">
+                      {store.showPrices ? money(line.priceCents, store.currency) : '—'} للقطعة
+                    </p>
+                  ) : (
+                    <p class="line-meta" style="color:#b91c1c">
+                      مش متاح — شيله من السلة
+                    </p>
+                  )}
+                </div>
+
+                <div class="line-actions">
+                  {line.available && (
+                    <form method="POST" style="display:flex;align-items:center;gap:.3rem">
+                      <input type="hidden" name="action" value="quantity" />
+                      <input type="hidden" name="product" value={line.productId} />
+                      <input type="hidden" name="color" value={line.color ?? ''} />
+                      <input type="hidden" name="size" value={line.size ?? ''} />
+                      <input
+                        name="quantity"
+                        type="number"
+                        min="1"
+                        max={line.maxQuantity}
+                        value={line.quantity}
+                        dir="ltr"
+                      />
+                      <button type="submit" class="link-btn" style="color:var(--muted)">
+                        تحديث
+                      </button>
+                    </form>
+                  )}
+
+                  <form method="POST">
+                    <input type="hidden" name="action" value="remove" />
+                    <input type="hidden" name="product" value={line.productId} />
+                    <input type="hidden" name="color" value={line.color ?? ''} />
+                    <input type="hidden" name="size" value={line.size ?? ''} />
+                    <button type="submit" class="link-btn">شيل</button>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <aside class="summary">
+            <div class="summary-row">
+              <span>عدد القطع</span>
+              <span>{resolved.itemCount}</span>
+            </div>
+            {store.showPrices && (
+              <div class="summary-row summary-row--total">
+                <span>الإجمالي</span>
+                <span>{money(resolved.subtotalCents, store.currency)}</span>
+              </div>
+            )}
+            {purchasable.length > 0 ? (
+              <a href={`${base}/checkout`} class="btn btn--orange">إتمام الطلب</a>
+            ) : (
+              <p class="line-meta">مفيش منتجات متاحة في السلة.</p>
+            )}
+            <a href={`${base}/products`} class="btn btn--ghost btn--sm">كمّل تسوق</a>
+          </aside>
+        </div>
+      )
+    }
+  </div>
+</Storefront>

@@ -1,0 +1,157 @@
+---
+/**
+ * Product detail. Variants are rendered as radio buttons so the choice works
+ * without JavaScript, and the add-to-cart form posts to a plain endpoint.
+ */
+import Storefront from '../../../../layouts/Storefront.astro';
+import { scopeStore } from '../../../../lib/db/store-scope';
+import { money } from '../../../../lib/format';
+import { splitOptions, CART_COOKIE, parseCart, addToCart, serialiseCart } from '../../../../lib/cart';
+import { redirect, str } from '../../../../lib/http';
+
+const store = Astro.locals.store;
+if (!store) return Astro.redirect('/');
+
+const db = scopeStore(Astro.locals.db, store.id);
+const id = Astro.params.id!;
+const base = `/s/${store.slug}`;
+
+const product = await db.first<{
+  id: string;
+  name_ar: string;
+  description: string | null;
+  price_cents: number;
+  compare_cents: number | null;
+  stock: number | null;
+  colors: string | null;
+  sizes: string | null;
+  is_active: number;
+}>('SELECT * FROM products WHERE store_id = ?1 AND id = ?2', [id]);
+
+if (!product || product.is_active !== 1) {
+  return new Response('المنتج مش موجود', { status: 404 });
+}
+
+const images = await db.all<{ url: string }>(
+  'SELECT url FROM product_images WHERE store_id = ?1 AND product_id = ?2 ORDER BY sort_order',
+  [id],
+);
+
+const colors = splitOptions(product.colors);
+const sizes = splitOptions(product.sizes);
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const quantity = Math.max(1, Math.min(99, Number(str(form.get('quantity'))) || 1));
+
+  const cart = parseCart(Astro.cookies.get(CART_COOKIE)?.value, store.slug);
+  const next = addToCart(cart, {
+    p: id,
+    q: quantity,
+    c: str(form.get('color')) || undefined,
+    s: str(form.get('size')) || undefined,
+  });
+
+  Astro.cookies.set(CART_COOKIE, serialiseCart(next), {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 14,
+  });
+
+  return redirect(`${base}/cart`);
+}
+
+const inStock = product.stock === null || product.stock > 0;
+const cover = images[0]?.url ?? null;
+---
+
+<Storefront store={store} title={product.name_ar}>
+  <div class="shell pdp">
+    <div class="pdp-media">
+      {cover ? <img src={cover} alt={product.name_ar} /> : <span style="color:#c4c4cc">مفيش صورة</span>}
+    </div>
+
+    <div>
+      <h1>{product.name_ar}</h1>
+
+      {
+        store.showPrices && (
+          <p class="pdp-price">
+            {money(product.price_cents, store.currency)}
+            {product.compare_cents && (
+              <s style="margin-inline-start:.5rem;color:var(--muted);font-size:.9rem;font-weight:600">
+                {money(product.compare_cents, store.currency)}
+              </s>
+            )}
+          </p>
+        )
+      }
+
+      {
+        product.description && (
+          <p class="pdp-desc" style="margin-block-start:.8rem">
+            {product.description}
+          </p>
+        )
+      }
+
+      {
+        !inStock ? (
+          <p class="alert alert--info" style="margin-block-start:1.2rem">
+            المنتج ده خلص من المخزن حاليًا.
+          </p>
+        ) : (
+          <form method="POST" class="pdp-form">
+            {colors.length > 0 && (
+              <div class="field">
+                <span>اللون</span>
+                <div class="variant-row">
+                  {colors.map((color, index) => (
+                    <label>
+                      <input type="radio" name="color" value={color} checked={index === 0} />
+                      <span>{color}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {sizes.length > 0 && (
+              <div class="field">
+                <span>المقاس</span>
+                <div class="variant-row">
+                  {sizes.map((size, index) => (
+                    <label>
+                      <input type="radio" name="size" value={size} checked={index === 0} />
+                      <span>{size}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div class="field">
+              <span>الكمية</span>
+              <div class="qty-row">
+                <input
+                  name="quantity"
+                  type="number"
+                  min="1"
+                  max={product.stock ?? 99}
+                  value="1"
+                  dir="ltr"
+                />
+                {product.stock !== null && (
+                  <small style="color:var(--muted)">متاح {product.stock} قطعة</small>
+                )}
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn--orange">أضف للسلة</button>
+          </form>
+        )
+      }
+    </div>
+  </div>
+</Storefront>

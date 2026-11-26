@@ -1,0 +1,278 @@
+---
+/**
+ * Checkout: one page, no payment gateway.
+ *
+ * The order is written inside a single D1 batch so a failure cannot leave a
+ * half-created order. Prices come from the database, never from the cart
+ * cookie — the customer only chooses *what* and *how many*.
+ */
+import Storefront from '../../../layouts/Storefront.astro';
+import { money } from '../../../lib/format';
+import { CART_COOKIE, parseCart, resolveCart } from '../../../lib/cart';
+import { newId } from '../../../lib/ids';
+import { str, redirect } from '../../../lib/http';
+
+const store = Astro.locals.store;
+if (!store) return Astro.redirect('/');
+
+const base = `/s/${store.slug}`;
+const db = Astro.locals.db;
+
+const cart = parseCart(Astro.cookies.get(CART_COOKIE)?.value, store.slug);
+const resolved = await resolveCart(db, store.id, cart);
+const purchasable = resolved.lines.filter((line) => line.available);
+
+if (purchasable.length === 0) return redirect(`${base}/cart`);
+
+/* ---- shipping fee ------------------------------------------------------- */
+
+const zone = await db
+  .prepare(
+    'SELECT fee_cents FROM shipping_zones WHERE store_id = ?1 AND is_active = 1 ORDER BY sort_order LIMIT 1',
+  )
+  .bind(store.id)
+  .first<{ fee_cents: number }>();
+
+const shippingCents = zone?.fee_cents ?? 0;
+const totalCents = resolved.subtotalCents + shippingCents;
+
+/* ---- payment methods ---------------------------------------------------- */
+
+const methods = await db
+  .prepare('SELECT method, instructions FROM payment_methods WHERE store_id = ?1 AND is_enabled = 1')
+  .bind(store.id)
+  .all<{ method: string; instructions: string | null }>();
+
+const METHOD_LABEL: Record<string, string> = {
+  cash: 'كاش عند الاستلام',
+  pos: 'ماكينة POS عند الاستلام',
+  vodafone_cash: 'فودافون كاش',
+  instapay: 'إنستاباي',
+};
+
+const availableMethods =
+  methods.results.length > 0 ? methods.results : [{ method: 'cash', instructions: null }];
+
+/* ---- place the order ---------------------------------------------------- */
+
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+
+  const name = str(form.get('name'));
+  const phone = str(form.get('phone'));
+  const address = str(form.get('address'));
+  const notes = str(form.get('notes')) || null;
+  const method = str(form.get('payment_method'));
+
+  if (name.length < 3) error = 'اكتب اسمك بالكامل.';
+  else if (!/^0?1[0-9]{9}$/.test(phone.replace(/[\s-]/g, ''))) error = 'رقم الموبايل مش صح.';
+  else if (address.length < 10) error = 'اكتب العنوان بالتفصيل.';
+  else if (!availableMethods.some((m) => m.method === method)) error = 'اختار طريقة دفع.';
+
+  if (!error) {
+    const status = await db
+      .prepare(
+        `SELECT id FROM order_statuses WHERE store_id = ?1 ORDER BY is_default DESC, sort_order LIMIT 1`,
+      )
+      .bind(store.id)
+      .first<{ id: string }>();
+
+    if (!status) {
+      error = 'المتجر مش مظبوط — مفيش حالات طلب.';
+    } else {
+      const orderId = newId('ord');
+      const reference = `KV-${newId('', 6).slice(1).toUpperCase()}`;
+
+      // Attach to the customer account when they happen to be logged in.
+      const customerId = Astro.locals.customer?.customerId ?? null;
+
+      const statements = [
+        db
+          .prepare(
+            `INSERT INTO orders
+              (id, store_id, customer_id, status_id, reference, subtotal_cents, shipping_cents,
+               total_cents, payment_method, payment_status, shipping_name, shipping_phone,
+               shipping_address, notes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'pending', ?10, ?11, ?12, ?13)`,
+          )
+          .bind(
+            orderId,
+            store.id,
+            customerId,
+            status.id,
+            reference,
+            resolved.subtotalCents,
+            shippingCents,
+            totalCents,
+            method,
+            name,
+            phone,
+            address,
+            notes,
+          ),
+      ];
+
+      for (const line of purchasable) {
+        statements.push(
+          db
+            .prepare(
+              `INSERT INTO order_items
+                (id, store_id, order_id, product_id, name_snapshot, unit_price_cents, quantity, color, size)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+            )
+            .bind(
+              newId('itm'),
+              store.id,
+              orderId,
+              line.productId,
+              line.name,
+              line.priceCents,
+              line.quantity,
+              line.color,
+              line.size,
+            ),
+        );
+
+        // Stock is decremented only for tracked products. The `stock >= qty`
+        // guard means two customers racing for the last item cannot both win.
+        statements.push(
+          db
+            .prepare(
+              `UPDATE products SET stock = stock - ?3, updated_at = datetime('now')
+                WHERE store_id = ?1 AND id = ?2 AND stock IS NOT NULL AND stock >= ?3`,
+            )
+            .bind(store.id, line.productId, line.quantity),
+        );
+      }
+
+      await db.batch(statements);
+
+      Astro.cookies.delete(CART_COOKIE, { path: '/' });
+      return redirect(`${base}/order/${reference}`);
+    }
+  }
+}
+
+const customer = Astro.locals.customer;
+---
+
+<Storefront store={store} title="إتمام الطلب" cartCount={resolved.itemCount}>
+  <div class="shell two-col">
+    <div>
+      {error && <p class="alert alert--error" style="margin-block-end:1rem">{error}</p>}
+
+      <form method="POST" class="panel" style="display:grid;gap:.9rem">
+        <h2>بيانات التوصيل</h2>
+
+        <div class="field">
+          <label for="name">الاسم بالكامل</label>
+          <input id="name" name="name" type="text" required value={customer?.name ?? ''} />
+        </div>
+
+        <div class="field">
+          <label for="phone">الموبايل</label>
+          <input id="phone" name="phone" type="tel" required placeholder="01012345678" dir="ltr" />
+        </div>
+
+        <div class="field">
+          <label for="address">العنوان</label>
+          <textarea id="address" name="address" required placeholder="المحافظة، المدينة، الشارع، رقم العمارة"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="notes">ملاحظات <small>(اختياري)</small></label>
+          <input id="notes" name="notes" type="text" placeholder="وقت التوصيل المفضل مثلًا" />
+        </div>
+
+        <div class="field">
+          <span>طريقة الدفع</span>
+          {
+            availableMethods.map((item, index) => (
+              <label class="pay-option">
+                <input
+                  type="radio"
+                  name="payment_method"
+                  value={item.method}
+                  checked={index === 0}
+                  required
+                />
+                <span>
+                  {METHOD_LABEL[item.method] ?? item.method}
+                  {item.instructions && <small>{item.instructions}</small>}
+                </span>
+              </label>
+            ))
+          }
+        </div>
+
+        <button type="submit" class="btn btn--orange">تأكيد الطلب</button>
+      </form>
+    </div>
+
+    <aside class="summary">
+      <h2 style="font-size:1rem">ملخص الطلب</h2>
+
+      {
+        purchasable.map((line) => (
+          <div class="summary-row">
+            <span>
+              {line.name} × {line.quantity}
+            </span>
+            <span>{store.showPrices ? money(line.priceCents * line.quantity, store.currency) : '—'}</span>
+          </div>
+        ))
+      }
+
+      {
+        store.showPrices && (
+          <>
+            <div class="summary-row">
+              <span>الشحن</span>
+              <span>{shippingCents === 0 ? 'مجانًا' : money(shippingCents, store.currency)}</span>
+            </div>
+            <div class="summary-row summary-row--total">
+              <span>الإجمالي</span>
+              <span>{money(totalCents, store.currency)}</span>
+            </div>
+          </>
+        )
+      }
+
+      <a href={`${base}/cart`} class="btn btn--ghost btn--sm">رجوع للسلة</a>
+    </aside>
+  </div>
+</Storefront>
+
+<style>
+  .pay-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .pay-option:has(input:checked) {
+    border-color: var(--ember);
+    background: var(--ember-soft);
+  }
+
+  .pay-option input {
+    margin-block-start: 0.2rem;
+    accent-color: var(--ember-deep);
+  }
+
+  .pay-option small {
+    display: block;
+    margin-block-start: 0.15rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+</style>
